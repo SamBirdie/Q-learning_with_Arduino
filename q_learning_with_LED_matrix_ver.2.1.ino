@@ -4,7 +4,7 @@
 const byte ROWS_PINS[ROWS] = {2, 7, 19, 5, 13, 18, 12, 16};
 const byte COLS_PINS[COLS] = {6, 11, 10, 3, 17, 4, 8, 9};
 
-// This variable is to set the prize's and robot's blinking nice and visible:
+// This variable is for setting the prize's blinking and robot's moving nice and visible:
 const short int REFRESH_TIMER_FREQ = 5000;
 
 // Robot's starting coordinate indices:
@@ -38,8 +38,8 @@ void setup() {
 
   for (int i = 0; i < MAX_OBSTACLES; i++) {
     int r, c;
-    r = random(ROWS-2) + 1;
-    c = random(COLS-2) + 1; 
+    r = random(ROWS-2) + 1; // Ignore walls
+    c = random(COLS-2) + 1; // Ignore walls
     obstaclesRow[i] = r;
     obstaclesCol[i] = c;
   }
@@ -122,7 +122,7 @@ void loop() {
     gotSP = true;
   }
 
-  // Finally, keep on showing the found route from starting point to target:
+  // Finally, keep on showing the found shortest path from starting point to target point:
   walkShortestPath();
   refreshScreen();
 }
@@ -197,6 +197,7 @@ void qTrain() {
     }
 
   for (int i = 0; i < 1000; i++) {
+    // Blink four LED's in the middle of the matrix while training the algorithm:
     if (refreshTimer < 100) {
       pixels[4][4] = LOW;
       pixels[4][3] = LOW;
@@ -214,6 +215,7 @@ void qTrain() {
       refreshTimer++;
     }
     else refreshTimer = 0;
+    // end of blinking code
 
     setStartingLocation();
     while (!isTerminalState()) {
