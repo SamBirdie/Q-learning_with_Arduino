@@ -11,9 +11,13 @@ const short int REFRESH_TIMER_FREQ = 5000;
 const short int STARTING_ROW = 6;
 const short int STARTING_COL = 2;
 
+// Maximum length of the shortest path (i.e. max number of free point in the matrix,
+// area minus borders):
+const short int MAX_PATH_LENGTH = ROWS * COLS - (ROWS * 2 + (COLS - 2) * 2);
+
 Maze maze;
 
-bool mazeExplored, qTrained, gotSP, exploredMazeShown, blinkTarget;
+bool mazeExplored, qTrained, gotSP, blinkTarget;
 bool surroundings[4];
 short int refreshTimer;
 short int showStepTimer;
@@ -26,7 +30,7 @@ short int exploredMazeRewards[ROWS][COLS];
 short int nearestZero[2];
 short int obstaclesRow[MAX_OBSTACLES];
 short int obstaclesCol[MAX_OBSTACLES];
-int qValuesMatrix[ROWS][COLS][4];
+int qValuesMatrix[ROWS][COLS][4]; // This needs to be integer (not double), because Arduino Uno doesn't have enough memory
 
 // 2-dimensional array of pixels:
 short int pixels[ROWS][COLS];
@@ -36,16 +40,8 @@ void setup() {
   Serial.begin(9600);
   randomSeed(analogRead(0));
 
-  for (int i = 0; i < MAX_OBSTACLES; i++) {
-    int r, c;
-    r = random(ROWS-2) + 1; // Ignore walls
-    c = random(COLS-2) + 1; // Ignore walls
-    obstaclesRow[i] = r;
-    obstaclesCol[i] = c;
-  }
-
+  generateObstacles();
   maze = Maze(obstaclesRow, obstaclesCol);
-  exploredMazeShown = false;
   mazeExplored = false;
   qTrained = false;
   gotSP = false;
@@ -67,7 +63,7 @@ void setup() {
 
   for (int row = 0; row < ROWS; row++) {
     for (int col = 0; col < COLS; col++) {
-      if (maze.getPrize(row, col) < -1) // set LED on if prize < -1
+      if (maze.getPrize(row, col) < -1) // Set LED on if prize < -1
         pixels[row][col] = LOW;
       else pixels[row][col] = HIGH; // else set LED off
       exploredMazeRewards[row][col] = -200;
@@ -83,10 +79,6 @@ void setup() {
 
   for (int i = 0; i < 4; i++)
     surroundings[i] = true;
-
-  for (int i = 0; i < 40; i++)
-    for (int j = 0 ; j < 2; j++)
-      shortestPath[i][j] = -1;
 }
 
 void loop() {
@@ -107,8 +99,8 @@ void loop() {
   // This needs to be done only once:
   if (!qTrained) {
     qTrain();
-    for (int row = 0; row < ROWS; row++) 
-      for (int col = 0; col < COLS; col++) 
+    for (int row = 0; row < ROWS; row++)
+      for (int col = 0; col < COLS; col++)
         pixels[row][col] = pixelsMaze[row][col];
     blinkTarget = true;
     qTrained = true;
@@ -116,7 +108,7 @@ void loop() {
 
   // This needs to be done only once:
   if (!gotSP) {
-    getSP();
+    getShortestPath();
     robotsCoordinates[0] = STARTING_ROW;
     robotsCoordinates[1] = STARTING_COL;
     gotSP = true;
@@ -125,6 +117,22 @@ void loop() {
   // Finally, keep on showing the found shortest path from starting point to target point:
   walkShortestPath();
   refreshScreen();
+}
+
+void generateObstacles() {
+  int i = 0;
+  int obstacles = 0;
+  int r, c;
+  while (obstacles <= MAX_OBSTACLES && i < MAX_OBSTACLES * 10) {
+    r = random(ROWS - 2) + 1; // Ignore walls
+    c = random(COLS - 2) + 1; // Ignore walls
+    if (!(r == STARTING_ROW && c == STARTING_COL)) { // Robot's starting point is not allowed
+      obstaclesRow[i] = r;
+      obstaclesCol[i] = c;
+      obstacles++;
+    }
+    i++;
+  }
 }
 
 void walkShortestPath() {
@@ -140,7 +148,10 @@ void walkShortestPath() {
   }
 }
 
-void getSP() {
+void getShortestPath() {
+  for (int i = 0; i < MAX_PATH_LENGTH; i++)
+    for (int j = 0 ; j < 2; j++)
+      shortestPath[i][j] = -1;
   int i = 0;
   int action;
   robotsCoordinates[0] = STARTING_ROW;
@@ -226,6 +237,7 @@ void qTrain() {
       int reward = exploredMazeRewards[robotsCoordinates[0]][robotsCoordinates[1]];
       double oldQValue = qValuesMatrix[oldRow][oldCol][trainingAction];
       double maxQValue = qValuesMatrix[robotsCoordinates[0]][robotsCoordinates[1]][0];
+      
       for (int i = 1; i < 4; i++)
         if (qValuesMatrix[robotsCoordinates[0]][robotsCoordinates[1]][i] > maxQValue)
           maxQValue = qValuesMatrix[robotsCoordinates[0]][robotsCoordinates[1]][i];
@@ -259,7 +271,7 @@ void exploreMaze() {
         break;
       }
     }
-    // move to nearest zero:
+    // Move to nearest zero:
     robotsCoordinates[0] = nearestZero[0];
     robotsCoordinates[1] = nearestZero[1];
     exploreNeighbours();
@@ -303,18 +315,11 @@ void addZerosCoordinates(int r, int c) {
 }
 
 void moveOnSP() { // Move robot to next node on shortest path
-
   pixels[robotsCoordinates[0]][robotsCoordinates[1]] = HIGH; // Turn the previous led off
   robotsCoordinates[0] = shortestPath[shortestPathCounter][0];
   robotsCoordinates[1] = shortestPath[shortestPathCounter][1];
   shortestPathCounter++;
   showSP();
-}
-
-void showMaze() {
-  for (int r = 0; r < ROWS; r++)
-    for (int c = 0; c < COLS; c++)
-      if (exploredMazeRewards[r][c] == -100) pixels[r][c] = LOW;
 }
 
 void showSP() {
@@ -350,17 +355,17 @@ void refreshScreen() {
     digitalWrite(ROWS_PINS[thisRow], LOW);
     // Blink target-LED:
     if (blinkTarget) {
-    if (refreshTimer < REFRESH_TIMER_FREQ) {
-          pixels[targetsCoordinates[0]][targetsCoordinates[1]] = LOW;
-          pixels[robotsCoordinates[0]][robotsCoordinates[1]] = LOW;
-          refreshTimer++;
-        }
-        else if (refreshTimer < REFRESH_TIMER_FREQ*2) {
-          pixels[targetsCoordinates[0]][targetsCoordinates[1]] = HIGH;
-          pixels[robotsCoordinates[0]][robotsCoordinates[1]] = LOW;
-          refreshTimer++;
-        }
-        else refreshTimer = 0;
+      if (refreshTimer < REFRESH_TIMER_FREQ) {
+        pixels[targetsCoordinates[0]][targetsCoordinates[1]] = LOW;
+        pixels[robotsCoordinates[0]][robotsCoordinates[1]] = LOW;
+        refreshTimer++;
+      }
+      else if (refreshTimer < REFRESH_TIMER_FREQ * 2) {
+        pixels[targetsCoordinates[0]][targetsCoordinates[1]] = HIGH;
+        pixels[robotsCoordinates[0]][robotsCoordinates[1]] = LOW;
+        refreshTimer++;
+      }
+      else refreshTimer = 0;
     }
   }
 }
