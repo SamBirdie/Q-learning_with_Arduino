@@ -17,7 +17,7 @@ const short int MAX_PATH_LENGTH = ROWS * COLS - (ROWS * 2 + (COLS - 2) * 2);
 
 Maze maze;
 
-bool mazeExplored, qTrained, gotSP, blinkTarget;
+bool blinkTarget;
 bool surroundings[4];
 short int refreshTimer;
 short int showStepTimer;
@@ -42,13 +42,9 @@ void setup() {
 
   generateObstacles();
   maze = Maze(obstaclesRow, obstaclesCol);
-  mazeExplored = false;
-  qTrained = false;
-  gotSP = false;
   blinkTarget = false;
   targetsCoordinates[0] = maze.getPrizesRowCoordinate();
   targetsCoordinates[1] = maze.getPrizesColCoordinate();
-
   robotsCoordinates[0] = STARTING_ROW;
   robotsCoordinates[1] = STARTING_COL;
   refreshTimer = 0;
@@ -79,42 +75,29 @@ void setup() {
 
   for (int i = 0; i < 4; i++)
     surroundings[i] = true;
+
+  exploreMaze();
+  for (int row = 0; row < ROWS; row++) {
+    for (int col = 0; col < COLS; col++) {
+      if (exploredMazeRewards[row][col] < -1) // set LED on if prize < -1
+        pixelsMaze[row][col] = LOW;
+      else pixelsMaze[row][col] = HIGH; // else set LED off
+    }
+  }
+  
+  qTrain();
+  for (int row = 0; row < ROWS; row++)
+    for (int col = 0; col < COLS; col++)
+      pixels[row][col] = pixelsMaze[row][col];
+  blinkTarget = true;
+
+  getShortestPath();
+  robotsCoordinates[0] = STARTING_ROW;
+  robotsCoordinates[1] = STARTING_COL;
 }
 
 void loop() {
-
-  // This needs to be done only once:
-  if (!mazeExplored) {
-    exploreMaze();
-    for (int row = 0; row < ROWS; row++) {
-      for (int col = 0; col < COLS; col++) {
-        if (exploredMazeRewards[row][col] < -1) // set LED on if prize < -1
-          pixelsMaze[row][col] = LOW;
-        else pixelsMaze[row][col] = HIGH; // else set LED off
-      }
-    }
-    mazeExplored = true;
-  }
-
-  // This needs to be done only once:
-  if (!qTrained) {
-    qTrain();
-    for (int row = 0; row < ROWS; row++)
-      for (int col = 0; col < COLS; col++)
-        pixels[row][col] = pixelsMaze[row][col];
-    blinkTarget = true;
-    qTrained = true;
-  }
-
-  // This needs to be done only once:
-  if (!gotSP) {
-    getShortestPath();
-    robotsCoordinates[0] = STARTING_ROW;
-    robotsCoordinates[1] = STARTING_COL;
-    gotSP = true;
-  }
-
-  // Finally, keep on showing the found shortest path from starting point to target point:
+  // Keep on showing the found shortest path from starting point to target point:
   walkShortestPath();
   refreshScreen();
 }
@@ -237,7 +220,7 @@ void qTrain() {
       int reward = exploredMazeRewards[robotsCoordinates[0]][robotsCoordinates[1]];
       double oldQValue = qValuesMatrix[oldRow][oldCol][trainingAction];
       double maxQValue = qValuesMatrix[robotsCoordinates[0]][robotsCoordinates[1]][0];
-      
+
       for (int i = 1; i < 4; i++)
         if (qValuesMatrix[robotsCoordinates[0]][robotsCoordinates[1]][i] > maxQValue)
           maxQValue = qValuesMatrix[robotsCoordinates[0]][robotsCoordinates[1]][i];
